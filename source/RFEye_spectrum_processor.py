@@ -8,6 +8,8 @@ global windows, linux, CODE_PATH
 windows = 1
 linux = 0
 
+CONFIG_FILENAME = 'rfeyed.cfg'
+
 if windows:
 	CODE_PATH = 'C:\\Users\\Vignesh\\Documents\\MATLAB\\MEng_Project'
 elif linux:
@@ -27,11 +29,11 @@ class config_reader:
 	def read_config_file(self):
 		f = open(self.filename, 'r')
 		for line in f:
-			# Break when low resolution string is matched
-			loop_breaker = re.search(r"""([Ll]ow)\s*[Rr]esolution""", line)
-			if loop_breaker != None:
-				# print(loop_breaker.group(0))
-				break
+			# Break when low resolution string is matched (Disabled currently as it is not used)
+			# loop_breaker = re.search(r"""([Ll]ow)\s*[Rr]esolution""", line)
+			# if loop_breaker != None:
+			#	# print(loop_breaker.group(0))
+			#	break
 			freq_match = re.search(r"""scan\s*=\s*\d+\w+,\s*\d+,\s*(\d+),\s*(\d+)""", line)
 			if freq_match != None:
 				# print(freq_match.group(0))
@@ -54,17 +56,29 @@ class get_spectrum_data:
 		# Assert that stop period is greater than or equal start period
 		self.start_period = start_period
 		self.stop_period = stop_period
+		assert self.datetime_str_to_MATLAB_datenum(start_period, "%m-%d-%Y %H:%M:%S") < self.datetime_str_to_MATLAB_datenum(stop_period, "%m-%d-%Y %H:%M:%S"), "ERROR: Start period is greater than Stop period. Exiting"
+		# TODO self.period_argument_format = period_format
 		# Assert that the stop frequency is greater than the start frequency
 		self.start_freq = start_freq
 		self.stop_freq = stop_freq
+		assert self.start_freq < self.stop_freq, "ERROR: Start frequency entered is greater than Stop frequency"
 		# Initialize time_array, f_array
 		self.time_array = []
 		self.f_array = []
 		self.include_runs_dirs = []
 		self.power_matrix = np.array([])
 		self.first_entry = True
-		# Read configuration file
-		self.cfg_data = config_reader(CODE_PATH + '\\rfeyed.cfg')
+		# See if you have any configuration file in the CODE_PATH
+		filelist = os.listdir(CODE_PATH)
+		if CONFIG_FILENAME not in filelist:
+			file_path = input("Give the file path for the rfeyed.cfg file for getting configuration data: ")
+			config_file = file_path + r'\rfeyed.cfg'
+			# print(config_file)
+			self.cfg_data = config_reader(config_file)
+		else:
+			# Read configuration file
+			self.cfg_data = config_reader(CODE_PATH + r'\rfeyed.cfg')
+		assert self.cfg_data != None, "ERROR: Configuration data NOT read. Exited"
 		# Form the list of files to be read and filter out in terms of time and frequency
 		self.list_files_to_read()
 		# print(filtered_file_list)
@@ -73,18 +87,11 @@ class get_spectrum_data:
 		# 	print("File " + str(count) + " out of " + str(len(filtered_file_list)) + " going on")
 		# 	self.read_csv_file(filename)
 		# 	count += 1
-		print(self.f_array.shape)
-		print(self.power_matrix.shape)
+		# print(self.f_array.shape)
+		# print(self.power_matrix.shape)
 		self.time_array = np.array(self.time_array)
-		print(self.time_array.shape)
-		# for datetime_each in self.time_array:
-			# print(datetime_each)
-		# for each_file in filtered_file_list:
-			# self.get_freq_list(each_file)
-		# Read each of the file and extract spectral data relevant to
-		# frequency and period information parsed
-		# for freq_list in self.f_array:
-		# 	print(freq_list)
+		# print(self.time_array.shape)
+		
 		
 	def list_files_to_read(self):
 		include_subfolders = False
@@ -102,7 +109,17 @@ class get_spectrum_data:
 			if include_subfolders:
 				self.include_runs_dirs.append(self.cfg_data.subfolder[i])
 		
+		
 		assert len(self.include_runs_dirs) != 0, "ERROR runs directory list to include is empty"
+		# print(self.include_runs_dirs)
+		
+		# In case of bands included in both runs 2 and 3 TODO, this is a temporary adjustment
+		if len(self.include_runs_dirs) > 1:
+			for runs in self.include_runs_dirs:
+				if not (int(self.cfg_data.start_freq[self.include_runs_dirs.index(runs)]) < self.start_freq and self.stop_freq < int(self.cfg_data.stop_freq[self.include_runs_dirs.index(runs)])):
+					self.include_runs_dirs.remove(runs)
+		
+		#  print(self.include_runs_dirs)
 		# Split start_period/stop_period as start/stop date and start/stop time
 		start_period_list = self.start_period.split(' ')
 		stop_period_list = self.stop_period.split(' ')
@@ -221,10 +238,19 @@ class get_spectrum_data:
 					self.time_array.append(local_datetime_MATLAB_datenum)
 					count += 1
 			if count > 0:
-				print(count)
-				print("File Number " + str(file_count) + " going on")
+				if count < NumberOfRows:
+					if self.first_entry:
+						# skip start rows since this is the first file to be read
+						row_skip_list = range(1, NumberOfRows - count + 1, 1)
+					else:
+						# skip end rows since this is the last file to be read
+						row_skip_list = range(count + 1, NumberOfRows + 1, 1)
+				else:
+					row_skip_list = []
+				# print(count)
+				# print("File Number " + str(file_count) + " going on")
 				file_count += 1
-				self.read_csv_file(file)
+				self.read_csv_file(file, row_skip_list)
 				# filtered_file_list.append(file)
 		# return filtered_file_list
 	
@@ -306,11 +332,13 @@ class get_spectrum_data:
 				# freq_list_float.append(np.float64(re.match(r"""(\d+.\d+).\d+""", freq).group(1)))
 		# freq_list_float
 		
-	def read_csv_file(self, filename):
+	def read_csv_file(self, filename, row_skip_list):
 		freq_list = pd.read_csv(filename, nrows=1).columns.tolist()
 		freq_list_float = []
 		for subdir in self.include_runs_dirs:
-			if re.search(subdir, filename):
+			# To distinguish it as a directory
+			backslash_subdir = "\\\\" + subdir
+			if re.search(backslash_subdir, filename) != None:
 				# Find start_frequency in each running file
 				start_freq_in_file = self.cfg_data.start_freq[self.cfg_data.subfolder.index(subdir)]
 				start_freq_index = freq_list.index(str(start_freq_in_file))
@@ -322,15 +350,17 @@ class get_spectrum_data:
 						freq_list_float.append(np.float64(freq))
 					elif freq.count('.') == 2:
 						freq_list_float.append(np.float64(re.match(r"""(\d+.\d+).\d+""", freq).group(1)))
-		np_freq_list_float = np.array(freq_list_float)
-		first_index = start_freq_index + min((np.where(np_freq_list_float >= self.start_freq))[0])
-		last_index = start_freq_index + max((np.where(np_freq_list_float <= self.stop_freq))[0])
-		columns = freq_list[first_index:last_index]
-		spectrum_array = pd.read_csv(filename, usecols=columns).values    
-		if self.first_entry:
-			self.first_entry = False
-			self.power_matrix = spectrum_array
-		else:
-			self.power_matrix = np.concatenate((self.power_matrix, spectrum_array), axis=0)
-		self.f_array = np.array(freq_list_float[(first_index - start_freq_index):(last_index - start_freq_index)])
-		# Return f_array, spectrum_array and time_array
+				assert start_freq_index, "ERROR: start_freq_index didn't get the required value"
+				np_freq_list_float = np.array(freq_list_float)
+				first_index = start_freq_index + min((np.where(np_freq_list_float >= self.start_freq))[0])
+				last_index = start_freq_index + max((np.where(np_freq_list_float <= self.stop_freq))[0])
+				columns = freq_list[first_index:last_index]
+				spectrum_array = pd.read_csv(filename, usecols=columns, skiprows=row_skip_list).values
+				# print(spectrum_array.shape)
+				if self.first_entry:
+					self.first_entry = False
+					self.power_matrix = spectrum_array
+				else:
+					self.power_matrix = np.concatenate((self.power_matrix, spectrum_array), axis=0)
+				self.f_array = np.array(freq_list_float[(first_index - start_freq_index):(last_index - start_freq_index)])		
+				# Return f_array, spectrum_array and time_array
