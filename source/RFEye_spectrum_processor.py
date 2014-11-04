@@ -5,15 +5,16 @@ import pandas as pd
 # Global declarations
 
 global windows, linux, CODE_PATH
-windows = 1
-linux = 0
+windows = 0
+linux = 1
 
 CONFIG_FILENAME = 'rfeyed.cfg'
 
+# Change if the CODE PATH changes for example in different computer
 if windows:
 	CODE_PATH = 'C:\\Users\\Vignesh\\Documents\\MATLAB\\MEng_Project'
 elif linux:
-	CODE_PATH = '/home/rk126/Documents/MATLAB/MEng_Project'
+        CODE_PATH = '/home/rk126/MastersProject/RF_Spectrum_Analysis'
 
 class config_reader:
 	# start_freq = None
@@ -72,12 +73,12 @@ class get_spectrum_data:
 		filelist = os.listdir(CODE_PATH)
 		if CONFIG_FILENAME not in filelist:
 			file_path = input("Give the file path for the rfeyed.cfg file for getting configuration data: ")
-			config_file = file_path + r'\rfeyed.cfg'
+			config_file = file_path + r'/rfeyed.cfg'
 			# print(config_file)
 			self.cfg_data = config_reader(config_file)
 		else:
 			# Read configuration file
-			self.cfg_data = config_reader(CODE_PATH + r'\rfeyed.cfg')
+			self.cfg_data = config_reader(CODE_PATH + r'/rfeyed.cfg')
 		assert self.cfg_data != None, "ERROR: Configuration data NOT read. Exited"
 		# Form the list of files to be read and filter out in terms of time and frequency
 		self.list_files_to_read()
@@ -91,13 +92,13 @@ class get_spectrum_data:
 		# print(self.power_matrix.shape)
 		self.time_array = np.array(self.time_array)
 		# print(self.time_array.shape)
-		
-		
+
+
 	def list_files_to_read(self):
 		include_subfolders = False
 		YYMMDD_list = []
 		absolute_file_list = []
-		# Prepare subfolders to read data from and also exclude 
+		# Prepare subfolders to read data from and also exclude
 		# those files which doesn't have the frequency listed
 		# TODO, need to work on the logic of getting the list of folders
 		for i in range(0, len(self.cfg_data.subfolder)):
@@ -108,17 +109,17 @@ class get_spectrum_data:
 				include_subfolders = False
 			if include_subfolders:
 				self.include_runs_dirs.append(self.cfg_data.subfolder[i])
-		
-		
+
+
 		assert len(self.include_runs_dirs) != 0, "ERROR runs directory list to include is empty"
 		# print(self.include_runs_dirs)
-		
+
 		# In case of bands included in both runs 2 and 3 TODO, this is a temporary adjustment
 		if len(self.include_runs_dirs) > 1:
 			for runs in self.include_runs_dirs:
-				if not (int(self.cfg_data.start_freq[self.include_runs_dirs.index(runs)]) < self.start_freq and self.stop_freq < int(self.cfg_data.stop_freq[self.include_runs_dirs.index(runs)])):
+				if not (int(self.cfg_data.start_freq[self.cfg_data.subfolder.index(runs)]) < self.start_freq and self.stop_freq < int(self.cfg_data.stop_freq[self.cfg_data.subfolder.index(runs)])):
 					self.include_runs_dirs.remove(runs)
-		
+
 		#  print(self.include_runs_dirs)
 		# Split start_period/stop_period as start/stop date and start/stop time
 		start_period_list = self.start_period.split(' ')
@@ -130,7 +131,7 @@ class get_spectrum_data:
 			stop_date = stop_period_list[0]
 		start_date_in_YYMMDD = start_date[8:10] + start_date[0:2] + start_date[3:5]
 		stop_date_in_YYMMDD = stop_date[8:10] + stop_date[0:2] + stop_date[3:5]
-		directory_list = os.listdir(CODE_PATH + "\\Data")
+		directory_list = os.listdir(CODE_PATH + "/Data")
 		for date_dir_list in directory_list:
 			# These subfolders are present in the Data directory, in directory with YYMMDD
 			if  int(date_dir_list) >= int(start_date_in_YYMMDD):
@@ -139,15 +140,18 @@ class get_spectrum_data:
 		assert len(YYMMDD_list) != 0, "ERROR: List of YYMMDD folders to include is empty"
 		for i in range(0, len(YYMMDD_list)):
 			for j in range(0, len(self.include_runs_dirs)):
-				dir_list = CODE_PATH + "\\Data\\" + YYMMDD_list[i] + "\\" + self.include_runs_dirs[j] + "\\" 
+				dir_list = CODE_PATH + "/Data/" + YYMMDD_list[i] + "/" + self.include_runs_dirs[j] + "/"
 				for files in os.listdir(dir_list):
 					match_csv = re.search(r"""\.csv""", files)
 					if match_csv:
 						absolute_file_list.append(dir_list + files)
-		self.get_filtered_file_list(absolute_file_list)
+                absolute_file_list.sort()
+                # for each_file in absolute_file_list:
+                        # print(each_file)
+                self.get_filtered_file_list(absolute_file_list)
 		# Return filtered list of files
 		# return self.get_filtered_file_list(absolute_file_list)
-	
+
 	def interpolate_gps_datetime(self, filename, unknown_index):
 		GPSTimeDateRealTime = pd.read_csv(filename, usecols=['GPS_Time', 'GPS_Date', 'Time'])
 		NumberOfRows = len(GPSTimeDateRealTime)
@@ -176,7 +180,7 @@ class get_spectrum_data:
 						GPSDateTime = self.interpolate_gps_datetime(filename, unknown_index - 1).split(' ')
 						GPSDate[unknown_index - 1] = GPSDateTime[0]
 						GPSTime[unknown_index - 1] = GPSDateTime[1]
-						
+
 				if go_down:
 					if not (GPSDate[unknown_index + 1] == "Unknown" or GPSDate[unknown_index + 1] == "unknown" or GPSTime[unknown_index + 1] == "Unknown" or GPSTime[unknown_index + 1] == "unknown"):
 						time_diff = datetime.datetime.strptime(RealTime[unknown_index + 1].split('.').__getitem__(0), real_time_format) - datetime.datetime.strptime(RealTime[unknown_index].split('.').__getitem__(0), real_time_format)
@@ -186,7 +190,7 @@ class get_spectrum_data:
 						GPSDateTime = self.interpolate_gps_datetime(filename, unknown_index + 1).split(' ')
 						GPSDate[unknown_index + 1] = GPSDateTime[0]
 						GPSTime[unknown_index + 1] = GPSDateTime[1]
-						
+
 			elif unknown_index == 0:
 				go_up = False
 				go_down = True
@@ -198,7 +202,7 @@ class get_spectrum_data:
 					GPSDateTime = self.interpolate_gps_datetime(filename, unknown_index + 1).split(' ')
 					GPSDate[unknown_index + 1] = GPSDateTime[0]
 					GPSTime[unknown_index + 1] = GPSDateTime[1]
-					
+
 			elif unknown_index == (NumberOfRows - 1):
 				go_up = True
 				go_down = False
@@ -210,7 +214,7 @@ class get_spectrum_data:
 					GPSDateTime = self.interpolate_gps_datetime(filename, unknown_index - 1).split(' ')
 					GPSDate[unknown_index - 1] = GPSDateTime[0]
 					GPSTime[unknown_index - 1] = GPSDateTime[1]
-		
+
 	def get_filtered_file_list(self, absolute_file_list):
 		# Get the file list to be read completely segregating in accordance with the start and stop period
 		filtered_file_list = []
@@ -230,8 +234,10 @@ class get_spectrum_data:
 					gps_datetime = self.interpolate_gps_datetime(file, i)
 				gps_datetime_format = "%d/%m/%y %H:%M:%S"
 				US_datetime_format = "%m-%d-%Y %H:%M:%S"
-				local_datetime_str = self.add_offset(gps_datetime, gps_datetime_format, '-0400')
-				local_datetime_MATLAB_datenum = self.datetime_str_to_MATLAB_datenum(local_datetime_str, gps_datetime_format)
+				# print(gps_datetime)
+                                local_datetime_str = self.add_offset(gps_datetime, gps_datetime_format, '-0400')
+				# print(local_datetime_str)
+                                local_datetime_MATLAB_datenum = self.datetime_str_to_MATLAB_datenum(local_datetime_str, gps_datetime_format)
 				start_period_MATLAB_datenum = self.datetime_str_to_MATLAB_datenum(self.start_period, US_datetime_format)
 				stop_period_MATLAB_datenum = self.datetime_str_to_MATLAB_datenum(self.stop_period, US_datetime_format)
 				if start_period_MATLAB_datenum <= local_datetime_MATLAB_datenum and local_datetime_MATLAB_datenum <= stop_period_MATLAB_datenum:
@@ -253,14 +259,14 @@ class get_spectrum_data:
 				self.read_csv_file(file, row_skip_list)
 				# filtered_file_list.append(file)
 		# return filtered_file_list
-	
+
 	# def get_freq_list(self, filename):
 		# print("In Freq list function")
 		# for subfolders in self.include_runs_dirs:
 			# match = re.search(subfolders, filename)
 			# if match != None:
-				
-		
+
+
 		# # Read the CSV file once more to get the frequency information
 		# first_two_rows = pd.read_csv(filename, nrows = 1)
 		# start_freq_in_file = int(first_two_rows.get_value(0, "Start_Frequency"))
@@ -277,7 +283,7 @@ class get_spectrum_data:
 				# return
 			# else:
 				# print("Need to update")
-		
+
 		# frequency_list_in_file = first_two_rows.columns.tolist()
 		# frequency_list_in_file = frequency_list_in_file[frequency_list_in_file.index(str(start_freq_in_file)):(len(frequency_list_in_file) - 1)]
 		# for_count = 0
@@ -292,13 +298,16 @@ class get_spectrum_data:
 					# # Check if frequency already in the list
 					# if frequencies not in self.f_array:
 						# self.f_array.append(np.float64(frequencies))
-	
+
 	def add_offset(self, datetime_str, datetime_format, offset):
 		datetime_obj = datetime.datetime.strptime(datetime_str, datetime_format)
-		offset_obj = datetime.datetime.strptime('+0000', '%z') - datetime.datetime.strptime(offset, "%z")
-		datetime_offsetted = datetime_obj + offset_obj
+                offset_obj = datetime.datetime.strptime('0000', '%H%M') - datetime.datetime.strptime(offset[1:], "%H%M")
+                if offset[0] == '-':
+                        datetime_offsetted = datetime_obj + offset_obj
+                elif offset[0] == '+':
+                        datetime_offsetted = datetime_obj - offset_obj
 		return datetime_offsetted.strftime(datetime_format)
-	
+
 	def datetime_str_to_MATLAB_datenum(self, date_time, datetime_format):
 		""" Arguments - tuple of form (date, time), date_format dd/mm/yy or mm-dd-yyyy
 			Returns - datenum with standard date/time string tuples
@@ -307,7 +316,7 @@ class get_spectrum_data:
 		frac = (datetime_obj - datetime.datetime(datetime_obj.year, datetime_obj.month, datetime_obj.day, 0, 0, 0)).seconds / (24.0 * 60.0 * 60.0)
 		MATLAB_datenum_format = (datetime_obj + datetime.timedelta(days = 366)).toordinal() + frac
 		return MATLAB_datenum_format
-	
+
 	# Convert datetime_str to MATLAB's datenum which can be used for comparisons
 	def MATLAB_datenum_to_str(self, datenum_time_date):
 		""" Arguments - datenum_time_date
@@ -316,28 +325,13 @@ class get_spectrum_data:
 		matlab_datenum = datenum_time_date
 		python_datetime = datetime.datetime.fromordinal(int(matlab_datenum)) + datetime.timedelta(days=matlab_datenum%1) - datetime.timedelta(days = 366)
 		return python_datetime.strftime("%m-%d-%y %H:%M:%S")
-		
-	# def read_csv_file(self, filename):
-		# freq_list = pd.read_csv(filename, nrows=1).columns.tolist()
-		# freq_list_float = []
-		# for subdir in self.include_runs_dirs:
-			# if re.search(subdir, filename):
-				# Find start_freq
-				# start_freq_in_file = self.cfg_data.start_freq[self.cfg_data.subfolder.index(subdir)]
-		# start_freq_index = freq_list.index(str(start_freq_in_file))
-		# for freq in freq_list[start_freq_index:]:
-			# if freq.count('.') == 1:
-				# freq_list_float.append(np.float64(freq))
-			# elif freq.count('.') == 2:
-				# freq_list_float.append(np.float64(re.match(r"""(\d+.\d+).\d+""", freq).group(1)))
-		# freq_list_float
-		
+
 	def read_csv_file(self, filename, row_skip_list):
 		freq_list = pd.read_csv(filename, nrows=1).columns.tolist()
 		freq_list_float = []
 		for subdir in self.include_runs_dirs:
 			# To distinguish it as a directory
-			backslash_subdir = "\\\\" + subdir
+			backslash_subdir = "/" + subdir
 			if re.search(backslash_subdir, filename) != None:
 				# Find start_frequency in each running file
 				start_freq_in_file = self.cfg_data.start_freq[self.cfg_data.subfolder.index(subdir)]
@@ -362,5 +356,5 @@ class get_spectrum_data:
 					self.power_matrix = spectrum_array
 				else:
 					self.power_matrix = np.concatenate((self.power_matrix, spectrum_array), axis=0)
-				self.f_array = np.array(freq_list_float[(first_index - start_freq_index):(last_index - start_freq_index)])		
+				self.f_array = np.array(freq_list_float[(first_index - start_freq_index):(last_index - start_freq_index)])
 				# Return f_array, spectrum_array and time_array
